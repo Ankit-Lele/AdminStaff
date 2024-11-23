@@ -1,0 +1,14 @@
+:root {
+    font-family: 'Arial', sans-serif;
+    color-scheme: light dark;
+    color: #333; /* Darker text */
+    background-color: #fafafa; /* Lighter background */
+}
+
+body {
+    margin: 0;
+    display: flex;
+    place-items: center;
+    min-width: 320px;
+    min-height: 100vh;
+}

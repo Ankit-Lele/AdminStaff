@@ -1,0 +1,6 @@
+@AdminStaff.Server_HostAddress = http://localhost:7210
+
+GET {{AdminStaff.Server_HostAddress}}/student/
+Accept: application/json
+
+###
