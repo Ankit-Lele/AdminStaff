@@ -1,6 +1,5 @@
 import  { useState } from 'react';
 import Navbar from './components/Navbar';
-import RoleDropdown from './components/RoleDropdown';
 import StudentList from './components/StudentList';
 import StudentModal from './components/StudentModal';
 
@@ -11,8 +10,6 @@ const App = () => {
     return (
         <>
             <Navbar />
-            <RoleDropdown role={role} setRole={setRole} />
-            <button onClick={() => setSelectedStudent({})}>Add New Student</button>
             <StudentList onStudentClick={(student) => setSelectedStudent(student)} />
             {selectedStudent && (
                 <StudentModal

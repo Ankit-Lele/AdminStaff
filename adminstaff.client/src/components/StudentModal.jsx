@@ -1,56 +1,56 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
-
-const StudentModal = ({ role, selectedStudent, onClose }) => {
+const StudentModal = ({ student, role, onClose }) => {
     const [formData, setFormData] = useState({
+        id: 0,
         firstName: '',
         lastName: '',
-        dateOfBirth: '',
+        dateOfBirth: null,
         nationalityId: '',
-    }); // Basic student details
-    const [familyMembers, setFamilyMembers] = useState([]); // Family members of the selected student
-    const [nationalities, setNationalities] = useState([]); // List of nationalities
+    });
+    const [familyMembers, setFamilyMembers] = useState([]);
+    const [nationalities, setNationalities] = useState([]);
+    const isDisabled = role === 'Admin' && student; // Disable fields for Admin if student exists
 
-    // Fetch nationalities when modal opens
+    // Fetch nationalities and initialize data
     useEffect(() => {
-        axios
-            .get('https://localhost:7210/api/Nationalities')
+        axios.get('https://localhost:7210/api/Nationalities')
             .then((response) => setNationalities(response.data || []))
             .catch((error) => console.error('Error fetching nationalities:', error));
-    }, []);
 
-    // Prefill form data and fetch family members when a student is selected
-    useEffect(() => {
-        if (selectedStudent?.id) {
-            setFormData(selectedStudent);
-
-            axios
-                .get(`https://localhost:7210/api/Students/${selectedStudent.id}/FamilyMembers`)
-                .then((response) => setFamilyMembers(response.data || []))
-                .catch((error) => console.error('Error fetching family members:', error));
-        } else {
-            // Reset form and family members for adding a new student
+        if (student && student.id) {
+            // Set form data for editing an existing student
             setFormData({
-                firstName: '',
-                lastName: '',
-                dateOfBirth: '',
-                nationalityId: '',
+                id: student.id,
+                firstName: student.firstName,
+                lastName: student.lastName,
+                dateOfBirth: new Date(student.dateOfBirth),
+                nationalityId: student.nationalityId || '',
             });
-            setFamilyMembers([]);
+
+            // Fetch family members for editing
+            axios.get(`https://localhost:7210/api/Students/${student.id}/FamilyMembers`)
+                .then((response) => {
+                    const formattedFamilyMembers = response.data.map((member) => ({
+                        ...member,
+                        dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null, // Convert to Date object
+                    }));
+                    setFamilyMembers(formattedFamilyMembers);
+                })
+                .catch((error) => console.error('Error fetching family members:', error));
         }
-    }, [selectedStudent]);
+    }, [student]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleAddFamilyMember = () => {
-        setFamilyMembers([
-            ...familyMembers,
-            { id: Date.now(), firstName: '', lastName: '', relationshipId: '', nationalityId: '', isNew: true },
-        ]);
+    const handleDateChange = (date) => {
+        setFormData({ ...formData, dateOfBirth: date });
     };
 
     const handleFamilyMemberChange = (index, field, value) => {
@@ -59,174 +59,222 @@ const StudentModal = ({ role, selectedStudent, onClose }) => {
         setFamilyMembers(updatedMembers);
     };
 
-    const handleDeleteFamilyMember = (index) => {
-        const memberToDelete = familyMembers[index];
-        if (!memberToDelete.isNew) {
-            axios
-                .delete(`https://localhost:7210/api/FamilyMembers/${memberToDelete.id}`)
-                .then(() => alert('Family member deleted successfully'))
-                .catch((error) => console.error('Error deleting family member:', error));
-        }
-        const updatedMembers = [...familyMembers];
-        updatedMembers.splice(index, 1);
-        setFamilyMembers(updatedMembers);
+    const handleAddFamilyMember = () => {
+        setFamilyMembers([
+            ...familyMembers,
+            { id: 0, firstName: '', lastName: '', dateOfBirth: null, relationshipId: '', nationalityId: '' },
+        ]);
     };
 
-    const handleSubmit = () => {
+    const handleDeleteFamilyMember = (id, index) => {
+        if (id) {
+            axios.delete(`https://localhost:7210/api/FamilyMembers/${id}`)
+                .then(() => {
+                    const updatedMembers = [...familyMembers];
+                    updatedMembers.splice(index, 1);
+                    setFamilyMembers(updatedMembers);
+                    alert('Family member deleted successfully.');
+                })
+                .catch((error) => console.error('Error deleting family member:', error));
+        } else {
+            const updatedMembers = [...familyMembers];
+            updatedMembers.splice(index, 1);
+            setFamilyMembers(updatedMembers);
+        }
+    };
+
+    // Update student details only
+    const handleUpdateStudentDetails = () => {
         if (!formData.firstName || !formData.lastName || !formData.dateOfBirth || !formData.nationalityId) {
             alert('Please fill in all required fields.');
             return;
         }
 
-        if (selectedStudent?.id) {
-            // Update existing student
-            axios
-                .put(`https://localhost:7210/api/Students/${selectedStudent.id}`, formData)
-                .then(() => alert('Student updated successfully'))
-                .catch((error) => console.error('Error updating student:', error));
-        } else {
-            // Add new student
-            axios
-                .post('https://localhost:7210/api/Students', formData)
-                .then(() => alert('Student added successfully'))
-                .catch((error) => console.error('Error adding student:', error));
+        const studentRequestBody = {
+            id: formData.id || 0,
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            dateOfBirth: formData.dateOfBirth.toISOString(), // Convert date to ISO format
+            nationalityId: parseInt(formData.nationalityId, 10),
+        };
+
+        axios.put(`https://localhost:7210/api/Students/${student.id}`, studentRequestBody)
+            .then(() => {
+                alert('Student details updated successfully!');
+                onClose();
+            })
+            .catch((error) => console.error('Error updating student details:', error));
+    };
+
+    // Update family members only
+    const handleUpdateFamilyDetails = () => {
+        if (!familyMembers.length) {
+            alert('No family members to update.');
+            return;
         }
 
-        onClose(); // Close modal after submission
+        const familyPromises = familyMembers.map((member) => {
+            // Ensure dateOfBirth is converted to a valid Date object or handle null
+            const dateOfBirth = member.dateOfBirth
+                ? new Date(member.dateOfBirth).toISOString()
+                : null;
+
+            if (member.id && member.id !== 0) {
+                // Update existing family member
+                return axios.put(`https://localhost:7210/api/FamilyMembers/${member.id}`, {
+                    id: member.id,
+                    firstName: member.firstName,
+                    lastName: member.lastName,
+                    dateOfBirth,
+                    relationshipId: parseInt(member.relationshipId || '0', 10),
+                    nationalityId: parseInt(member.nationalityId || '0', 10),
+                });
+            } else {
+                // Add new family member
+                return axios.post(`https://localhost:7210/api/Students/${formData.id}/FamilyMembers`, {
+                    firstName: member.firstName,
+                    lastName: member.lastName,
+                    dateOfBirth,
+                    relationshipId: parseInt(member.relationshipId || '0', 10),
+                    nationalityId: parseInt(member.nationalityId || '0', 10),
+                });
+            }
+        });
+
+        Promise.all(familyPromises)
+            .then(() => {
+                alert('Family details updated successfully!');
+            })
+            .catch((error) => console.error('Error updating family details:', error));
+    };
+    // Function to delete a student
+    const handleDeleteStudent = () => {
+        if (!student || !student.id) {
+            alert('Cannot delete a non-existent student.');
+            return;
+        }
+
+        if (window.confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
+            axios.delete(`https://localhost:7210/api/Students/${student.id}`)
+                .then(() => {
+                    alert('Student deleted successfully.');
+                    onClose(); // Close modal after deletion
+                })
+                .catch((error) => console.error('Error deleting student:', error));
+        }
     };
 
     return (
         <div className="modal">
-            <h2>{selectedStudent?.id ? 'Edit Student' : 'Add New Student'}</h2>
+            {/* Basic Information */}
+            <h3>Basic Information</h3>
+            <input
+                type="text"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleChange}
+                disabled={isDisabled}
+                placeholder="First Name"
+            />
+            <input
+                type="text"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleChange}
+                disabled={isDisabled}
+                placeholder="Last Name"
+            />
+            <DatePicker
+                selected={formData.dateOfBirth}
+                onChange={handleDateChange}
+                disabled={isDisabled}
+                placeholderText="Select Date of Birth"
+            />
+            <select name="nationalityId" value={formData.nationalityId} onChange={handleChange} disabled={isDisabled}>
+                <option value="">Select Nationality</option>
+                {nationalities.map((nat) => (
+                    <option key={nat.id} value={nat.id}>
+                        {nat.name}
+                    </option>
+                ))}
+            </select>
 
-            {/* Student Details Form */}
-            <form>
-                <input
-                    type="text"
-                    name="firstName"
-                    placeholder="First Name"
-                    value={formData.firstName || ''}
-                    onChange={handleChange}
-                    disabled={role === 'admin' && !!selectedStudent?.id} // Admin cannot edit existing names
-                />
-                <input
-                    type="text"
-                    name="lastName"
-                    placeholder="Last Name"
-                    value={formData.lastName || ''}
-                    onChange={handleChange}
-                    disabled={role === 'admin' && !!selectedStudent?.id} // Admin cannot edit existing names
-                />
-                <input
-                    type="date"
-                    name="dateOfBirth"
-                    placeholder="Date of Birth"
-                    value={formData.dateOfBirth || ''}
-                    onChange={handleChange}
-                    disabled={role === 'admin' && !!selectedStudent?.id} // Admin cannot edit existing names
-                />
-
-                <select
-                    name="nationalityId"
-                    value={formData.nationalityId}
-                    onChange={handleChange}
-                    disabled={role === 'admin' && !!selectedStudent?.id} // Admin cannot edit existing names
-                >
-                    <option value="">Select Nationality</option>
-                    {nationalities.map((nationality) => (
-                        <option key={nationality.id} value={nationality.id}>
-                            {nationality.name}
-                        </option>
-                    ))}
-                </select>
-
-                {/* Family Members Section */}
-                {selectedStudent?.id && (
-                    <>
-                        <h3>Family Members</h3>
-                        {familyMembers.map((member, index) => (
-                            <div key={member.id}>
-                                <input
-                                    type="text"
-                                    placeholder="First Name"
-                                    value={member.firstName}
-                                    onChange={(e) =>
-                                        handleFamilyMemberChange(index, 'firstName', e.target.value)
-                                    }
-                                    disabled={role === 'admin'}
-                                />
-                                <input
-                                    type="text"
-                                    placeholder="Last Name"
-                                    value={member.lastName}
-                                    onChange={(e) =>
-                                        handleFamilyMemberChange(index, 'lastName', e.target.value)
-                                    }
-                                    disabled={role === 'admin'}
-                                />
-                                <select
-                                    value={member.relationshipId}
-                                    onChange={(e) =>
-                                        handleFamilyMemberChange(index, 'relationshipId', e.target.value)
-                                    }
-                                    disabled={role === 'admin'}
-                                >
-                                    <option value="">Select Relationship</option>
-                                    <option value="1">Parent</option>
-                                    <option value="2">Sibling</option>
-                                    <option value="3">Spouse</option>
-                                </select>
-                                <select
-                                    value={member.nationalityId || ''}
-                                    onChange={(e) =>
-                                        handleFamilyMemberChange(index, 'nationalityId', e.target.value)
-                                    }
-                                    disabled={role === 'admin'}
-                                >
-                                    <option value="">Select Nationality</option>
-                                    {nationalities.map((nationality) => (
-                                        <option key={nationality.id} value={nationality.id}>
-                                            {nationality.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {role === 'registrar' && (
-                                    <button type="button" onClick={() => handleDeleteFamilyMember(index)}>
-                                        Delete Family Member
-                                    </button>
-                                )}
-                            </div>
+            {/* Family Information */}
+            <h3>Family Information</h3>
+            {familyMembers.map((member, index) => (
+                <div key={index}>
+                    <input
+                        type="text"
+                        value={member.firstName}
+                        onChange={(e) => handleFamilyMemberChange(index, 'firstName', e.target.value)}
+                        disabled={isDisabled}
+                        placeholder="First Name"
+                    />
+                    <input
+                        type="text"
+                        value={member.lastName}
+                        onChange={(e) => handleFamilyMemberChange(index, 'lastName', e.target.value)}
+                        disabled={isDisabled}
+                        placeholder="Last Name"
+                    />
+                    <DatePicker
+                        selected={member.dateOfBirth}
+                        onChange={(date) => handleFamilyMemberChange(index, 'dateOfBirth', date)}
+                        disabled={isDisabled}
+                        placeholderText="Select Date of Birth"
+                    />
+                    <select
+                        value={member.relationshipId}
+                        onChange={(e) => handleFamilyMemberChange(index, 'relationshipId', e.target.value)}
+                        disabled={isDisabled}
+                    >
+                        <option value="">Select Relationship</option>
+                        <option value="1">Parent</option>
+                        <option value="2">Sibling</option>
+                        <option value="3">Spouse</option>
+                    </select>
+                    <select
+                        value={member.nationalityId}
+                        onChange={(e) => handleFamilyMemberChange(index, 'nationalityId', e.target.value)}
+                        disabled={isDisabled}
+                    >
+                        <option value="">Select Nationality</option>
+                        {nationalities.map((nat) => (
+                            <option key={nat.id} value={nat.id}>
+                                {nat.name}
+                            </option>
                         ))}
-                        {role === 'registrar' && (
-                            <>
-                                <button type="button" onClick={handleAddFamilyMember}>
-                                    Add Family Member
-                                </button>
-                            </>
-                        )}
-                    </>
-                )}
+                    </select>
+                    {!isDisabled && (
+                        <>
+                            <button onClick={() => handleDeleteFamilyMember(member.id, index)}>Delete</button>
+                        </>
+                    )}
+                </div>
+            ))}
+            {!isDisabled && (
+                <>
+                    <button onClick={handleAddFamilyMember}>Add Family Member</button>
+                </>
+            )}
 
-                {/* Submit Button */}
-                {(role === 'registrar' || !selectedStudent?.id) && (
-                    <button type="button" onClick={handleSubmit}>
-                        {selectedStudent?.id ? 'Update Student' : 'Add Student'}
-                    </button>
-                )}
-
-                {/* Close Modal */}
-                <button type="button" onClick={onClose}>
-                    Close Modal
-                </button>
-            </form>
+            {/* Submit and Cancel Buttons */}
+            {!isDisabled && (
+                <>  
+                                 
+                    <button onClick={handleUpdateStudentDetails}>Update Student Details</button>
+                    <button onClick={handleUpdateFamilyDetails}>Update Family Details</button>
+                    <button style={{ backgroundColor: 'red', color: 'white' }} onClick={handleDeleteStudent}>Delete</button>    
+                    <button onClick={() => onClose()}>Cancel</button>
+                </>
+            )}
         </div>
     );
 };
 
-// PropTypes validation
 StudentModal.propTypes = {
+    student: PropTypes.object,
     role: PropTypes.string.isRequired,
-    selectedStudent: PropTypes.object,
     onClose: PropTypes.func.isRequired,
 };
 

@@ -1,4 +1,5 @@
 using AdminStaff.Server; // Namespace for AppDbContext
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
